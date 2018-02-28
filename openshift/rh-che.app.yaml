@@ -138,6 +138,11 @@ objects:
               configMapKeyRef:
                 key: che-openshift-precreate-subpaths
                 name: che
+          - name: CHE_KEYCLOAK_OSO_ENDPOINT
+            valueFrom:
+              configMapKeyRef:
+                key: keycloak-oso-endpoint
+                name: che
           - name: CHE_KEYCLOAK_GITHUB_ENDPOINT
             valueFrom:
               configMapKeyRef:
