@@ -7,4 +7,4 @@ assignees: ''
 
 ---
 
-
+Placeholder for eclipse/che#
