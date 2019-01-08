@@ -1,13 +1,19 @@
-[![Build Status](https://ci.centos.org/buildStatus/icon?job=devtools-rh-che-build-che-credentials-master)](https://ci.centos.org/view/Devtools/job/devtools-rh-che-build-che-credentials-master/)
+| Last build        | Description           |
+| ------------- |:-------------:|
+| [![Build Status](https://ci.centos.org/buildStatus/icon?job=devtools-rh-che-periodic-prod-2)](https://ci.centos.org/view/Devtools/job/devtools-rh-che-periodic-prod-2/) | periodic tests against production cluster us-east-2 |
+| [![Build Status](https://ci.centos.org/buildStatus/icon?job=devtools-rh-che-periodic-prod-preview-2a)](https://ci.centos.org/view/Devtools/job/devtools-rh-che-periodic-prod-preview-2a/) | periodic tests against prod-preview cluster us-east-2a |
+| [![Build Status](https://ci.centos.org/buildStatus/icon?job=devtools-rh-che-build-che-credentials-master)](https://ci.centos.org/view/Devtools/job/devtools-rh-che-build-che-credentials-master/) | master build |
+| [![Build Status](https://ci.codenvycorp.com/buildStatus/icon?job=rh-che-ci-master)](https://ci.codenvycorp.com/job/rh-che-ci-master/) | build compatibility with upstream |
+| [![Build Status](https://ci.centos.org/buildStatus/icon?job=devtools-rh-che-rh-che-compatibility-test-dev.rdu2c.fabric8.io)](https://ci.centos.org/view/Devtools/job/devtools-rh-che-rh-che-compatibility-test-dev.rdu2c.fabric8.io/) | integration tests against latest upstream SNAPSHOT |
+
 
 # Eclipse Che on OpenShift 
 
-## Table Of Content
+## Table Of Contents
 
-* [What is the Red Hat Che distribution](#what-is-the-redhat-che-distribution)
+* [What is the Red Hat Che distribution](#what-is-the-red-hat-che-distribution)
 * [How to build it](#how-to-build-it)
-* [How to deploy or roll-update on OpenShift](#how-to-deploy-or-roll-update-che-on-openshift-container-platform-minishift-or-osio)
-* [Further details](#further-details)
+* [PR-Check details](#pr-check-details)
 
 ## What is the Red Hat Che distribution
 
@@ -16,199 +22,31 @@ that adds some Red Hat specific plugins / behaviors up to the standard upstream 
 distribution. The Red Hat distribution powers [openshift.io](https://openshift.io) developers workspaces.
 
 Red Hat modifications against the upstream Che include:
-- The ability to disable the Dashboard (and remove the *Go to Dashboard* button from the Che IDE)
-- Keycloak integration
-- [fabric8-analytics Language Server](https://github.com/fabric8-analytics/fabric8-analytics-lsp-server) 
+
+* [fabric8-analytics Language Server](https://github.com/fabric8-analytics/fabric8-analytics-lsp-server)
+* a different set of Che stacks than upstream. They can contain specific Red Hat configurations such as providing 'oc' on command-line
+* telemetry to follow usage of different parts
+
+## Interaction of Red Hat Che with other openshift.io services
+
+![Interaction of Red Hat Che with other openshift.io services](https://user-images.githubusercontent.com/1461122/48473793-8213aa80-e7f9-11e8-8bc1-75549c771438.png)
+
+1. Opening `Codebases UI` in browser
+2. `fabric8-ui` sends request to `fabric8-wit`
+3. `fabric8-wit` sends request to `che-starter` in order to initiate workspace creation 
 
 ## How to build it
 
-### Build prerequisites
+*See*: [the Dev guide](./dev-guide.adoc)
 
-* Set some environment variables:
-    
-    * `DOCKER_HUB_NAMESPACE` can be overridden to point
-    to your own Docker Hub account
-    
-    ```bash
-    export DOCKER_HUB_NAMESPACE=myDockerNamspace
-    ```
+## PR-Check details
 
-    The docker namespace used by default is `docker.io/rhchestage`
-    
-### Build Red Hat distribution
+### PR-Check workflow
 
-```bash
-dev-scripts/build_fabric8.sh [PARAMETERS]
-```
+DEP IMAGE: [![Build Status](https://ci.centos.org/view/Devtools/job/devtools-rh-che-prcheck-build-dep/badge/icon)](https://ci.centos.org/view/Devtools/job/devtools-rh-che-prcheck-build-dep/)
 
-This script:
-- runs the RH maven build with the options passed as arguments,
-- generates the docker images for the upstream and the RH
-distribution and tag them appropriately.
+[![PR-Check sequence diagram](https://raw.githubusercontent.com/redhat-developer/rh-che/master/documentation/rh-che-prcheck/pr_check_general_squence_diagram.svg)](https://raw.githubusercontent.com/redhat-developer/rh-che/master/documentation/rh-che-prcheck/pr_check_general_squence_diagram.plantuml)
 
-### Build scripts parameters
-
-The optional build scripts parameters are the [parameters of the underlying Maven build](#maven-build-parameters).
-
-### Docker scripts to create and tag images from the RH build artifacts 
-
-##### In the local docker environment
-
-```bash
-dev-scripts/local_docker_create_images_and_tag.sh
-```
-__Note:__ This step is already included in the build scripts.
-However, if you plan to deploy or rollupdate to Minishift, you should also create/tag docker images
-in the Minishift docker environment, as detailed in next section. 
-
-##### In the Minishift docker environment
-
-```bash
-dev-scripts/minishift_docker_create_images_and_tag.sh
-```
-
-## How to deploy or roll-update Che on OpenShift Container Platform, Minishift or OSIO
-
-### Deployment prerequisites
-
-* [minishift](https://github.com/minishift/minishift#installation) (v1.0.0 or greater)
-* `oc` the OpenShift command line client tool. The binary is included in minishift distribution and can be found in folder `.minishift/cache/oc/<oc version>/`. You can add this folder to your `$PATH` using the following command `eval $(minishift oc-env)`.
-
-### Deploy to OpenShift Container Platform
-
-```bash
-# Configure OpenShift cluster details:
-export OPENSHIFT_ENDPOINT=<OCP_ENDPOINT_URL> # e.g. https://opnshmdnsy3t7twsh.centralus.cloudapp.azure.com:8443
-export OPENSHIFT_TOKEN=<OCP_TOKEN>
-export OPENSHIFT_NAMESPACE_URL=<CHE_HOSTNAME> # e.g. che-eclipse-che.52.173.199.80.xip.io
-
-# Deploy Che
-SCRIPT_URL=https://raw.githubusercontent.com/redhat-developer/rh-che/master/dev-scripts/openshift_deploy.sh
-export OPENSHIFT_FLAVOR=ocp && curl -fsSL ${SCRIPT_URL} -o get-che.sh && bash get-che.sh
-```
-
-And if you have cloned [redhat-developer/rh-che](https://github.com/redhat-developer/rh-che) you can deploy Che on OSIO executing:
-
-```bash
-export OPENSHIFT_FLAVOR=ocp && ./dev-scripts/openshift_deploy.sh
-```
-
-### Deploy to Minishift
-
-```bash
-SCRIPT_URL=https://raw.githubusercontent.com/redhat-developer/rh-che/master/dev-scripts/openshift_deploy.sh
-curl -fsSL ${SCRIPT_URL} -o get-che.sh && bash get-che.sh
-```
-
-Of course if you have cloned [redhat-developer/rh-che](https://github.com/redhat-developer/rh-che) you can deploy Che on minishift executing:
-
-```bash
-./dev-scripts/openshift_deploy.sh
-```
-
-### Deploy to openshift.io
-
-```bash
-SCRIPT_URL=https://raw.githubusercontent.com/redhat-developer/rh-che/master/dev-scripts/openshift_deploy.sh
-export OPENSHIFT_FLAVOR=osio && curl -fsSL ${SCRIPT_URL} -o get-che.sh && bash get-che.sh
-```
-
-And if you have cloned [redhat-developer/rh-che](https://github.com/redhat-developer/rh-che) you can deploy Che on OSIO executing:
-
-```bash
-export OPENSHIFT_FLAVOR=osio && ./dev-scripts/openshift_deploy.sh
-```
-
-### Deployment Options
-
-You can set different deployment options using environment variables:
-
-* `OPENSHIFT_FLAVOR`: possible values are `ocp`, `minishift` and `osio` (default is `minishift`)
-* `OPENSHIFT_ENDPOINT`: url of the OpenShift API (default is unset for ocp, `https://$(minishift ip):8443/` for minishift, `https://api.starter-us-east-2.openshift.com` for osio)
-* `OPENSHIFT_TOKEN` (default is unset)
-* `CHE_OPENSHIFT_PROJECT`: the OpenShift namespace where Che will be deployed (default is `eclipse-che` for ocp and minishift and `${OPENSHIFT_ID}-che` for osio)
-* `CHE_IMAGE_REPO`: `che-server` Docker image repository that will be used for deployment (default is `docker.io/rhchestage/che-server`)
-* `CHE_IMAGE_TAG`: `che-server` Docker image tag that will be used for deployment (default is `nightly-fabric8`)
-* `CHE_LOG_LEVEL`: Log level of che-server (default is `DEBUG`)
-* `CHE_DEBUGGING_ENABLED`: If set to `true` the script will create the OpenShift service to debug che-server (default is `true`)
-* `CHE_KEYCLOAK_DISABLED`: If this is set to true Keycloack authentication will be disabled (default is `true` for ocp and minishift, `false` for osio)
-* `OPENSHIFT_NAMESPACE_URL`: The Che application hostname (default is unset for ocp, `${CHE_OPENSHIFT_PROJECT}.$(minishift ip).nip.io` for minishift, `${CHE_OPENSHIFT_PROJECT}.8a09.starter-us-east-2.openshiftapps.com` for osio)
-
-#### ocp and minishift only options
-
-* `OPENSHIFT_USERNAME`: username to login on the OpenShift cluster. Ignored if `OPENSHIFT_TOKEN` is set (default is `developer`)
-* `OPENSHIFT_PASSWORD`: password to login on the OpenShift cluster. Ignored if `OPENSHIFT_TOKEN` is set (default is `developer`)
-
-__Warning__: If you are deploying the RH distribution build, ensure that you created / tagged the Che docker images 
-*in the Minishift docker environment* (see [previous section](#in-the-minishift-docker-environment)).
-If you want to build and deploy the RH distribution to Minishift in one go, you can use the
-[*all-in-one scripts*](#all-in-one-scripts-for-minishift).
-
-### Delete all resources and clean up in Minishift
-
-```bash
-dev-scripts/openshift_deploy.sh --command cleanup
-```
-
-### Roll-update the current Minishift deployment with the up-to-date docker image
-
-```bash
-dev-scripts/openshift_deploy.sh --command rollupdate
-```
-
-__Warning__: If you are deploying the RH distribution build, ensure that you created / tagged the Che docker images 
-[*in the Minishift docker environment*](#in-the-minishift-docker-environment).
-If you want to build and deploy the RH distribution to Minishift in one go, you can use the
-[*all-in-one scripts*](#all-in-one-scripts-for-minishift)
-
-### All-in-one scripts for Minishift
-
-Instead of running a script for each step in the process of building / deploying to Minisift,
-the following all-in-one scripts are also available, and can take the [same arguments as
-the build scripts](#build-scripts-parameters)
-
-##### For building the RedHat Che distribution
-
-- `dev-scripts/minishift_build_fabric8_and_deploy.sh [PARAMETERS]`:
-    - changes the current docker environment to use
-the minishift docker daemon,
-    - runs `dev-scripts/build_fabric8.sh [PARAMETERS]`
-    - runs `dev-scripts/openshift_deploy.sh --command cleanup`
-    - runs `dev-scripts/openshift_deploy.sh`
-    
-- `dev-scripts/minishift_build_fabric8_and_rollupdate.sh [PARAMETERS]`:
-    - changes the current docker environment to use 
-the minishift docker daemon,
-    - runs `dev-scripts/build_fabric8.sh [PARAMETERS]`
-    - runs `dev-scripts/openshift_deploy.sh --command rollupdate`
-
-## Further details
-
-### Maven build details
-
-The result of the RedHat Che distribution build will be available at the following location:
-    
-    rh-che/assembly/assembly-main/target/eclipse-che-fabric8-1.0.0-SNAPSHOT
-
-Alternatively, if the option to remove the Dashboard has been enabled then the classifier `without-dashboard`
-will be used and the result of the RedHat Che distribution build will be available at the following location:
-    
-    rh-che/assembly/assembly-main/target/eclipse-che-fabric8-1.0.0-SNAPSHOT-without-dashboard
-
-
-The build is started by running *maven* in the root of the current git repository,
-which is :`rh-che`
-
-
-#### Maven build parameters
-
-The build relies on the upstream Eclipse Che maven configuration. All the maven options available in Eclipse Che can be used here.
-For instance, the profile `fast` will skip all the tests and checks as describe [in the Eclipse Che development documentation](https://github.com/eclipse/che/wiki/Development-Workflow#build-and-run):
-
-    mvn clean install -Pfast
-
-
-##### Enabling / Disabling the Dashboard
-
-By default the Che Dashboard is part of the RedHat Che distribution.
-Howvever it can removed by with the `-DwithoutDashboard` argument
+- This diagram shows the general logic of PR-Check workflow from opening a PR to merge
+- PR_Check job : https://ci.centos.org/view/Devtools/job/devtools-rh-che-rh-che-prcheck-dev.rdu2c.fabric8.io/buildTimeTrend
+- Dependency image build job: https://ci.centos.org/view/Devtools/job/devtools-rh-che-prcheck-build-dep/buildTimeTrend

@@ -8,37 +8,41 @@
 currentDir=`pwd`
 ABSOLUTE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-. ${ABSOLUTE_PATH}/../config 
+. ${ABSOLUTE_PATH}/../config
 
 RH_CHE_TAG=$(git rev-parse --short HEAD)
 
-UPSTREAM_TAG=$(sed -n 's/^revision = \(.\{7\}\).*/\1/p' ${ABSOLUTE_PATH}/../assembly/assembly-build-info/target/dependency/WEB-INF/classes/org/eclipse/che/ide/ext/help/client/BuildInfo.properties)
+UPSTREAM_TAG=$(sed -n 's/^SCM-Revision: \(.\{7\}\).*/\1/p' ${ABSOLUTE_PATH}/../assembly/assembly-wsmaster-war/target/war/work/org.eclipse.che/assembly-wsmaster-war/META-INF/MANIFEST.MF)
 
 # Now lets build the local docker images
+
+ADDONS=${ABSOLUTE_PATH}/../openshift/minishift-addons
+
 DIR=${ABSOLUTE_PATH}/../dockerfiles/che-fabric8
 cd ${DIR}
 
 distPath='assembly/assembly-main/target/eclipse-che-*/eclipse-che-*'
-for distribution in `echo ${ABSOLUTE_PATH}/../${distPath};`
-do
+for distribution in `echo ${ABSOLUTE_PATH}/../${distPath}`; do
   case "$distribution" in
     ${ABSOLUTE_PATH}/../assembly/assembly-main/target/eclipse-che-${RH_DIST_SUFFIX}-*${RH_NO_DASHBOARD_SUFFIX}*)
-      TAG=${UPSTREAM_TAG}-${RH_DIST_SUFFIX}-no-dashboard-${RH_CHE_TAG}
-      NIGHTLY=nightly-${RH_DIST_SUFFIX}-no-dashboard
+      TAG=${UPSTREAM_TAG}-${RH_TAG_DIST_SUFFIX}-no-dashboard-${RH_CHE_TAG}
+      NIGHTLY=nightly-${RH_TAG_DIST_SUFFIX}-no-dashboard
+      if [ "$PR_CHECK_BUILD" == "true" ]; then
+        TAG=${RH_TAG_DIST_SUFFIX}-no-dashhoard-${RH_PULL_REQUEST_ID}
+      fi
       ;;
     ${ABSOLUTE_PATH}/../assembly/assembly-main/target/eclipse-che-${RH_DIST_SUFFIX}*)
-      TAG=${UPSTREAM_TAG}-${RH_DIST_SUFFIX}-${RH_CHE_TAG}
-      NIGHTLY=nightly-${RH_DIST_SUFFIX}
+      TAG=${UPSTREAM_TAG}-${RH_TAG_DIST_SUFFIX}-${RH_CHE_TAG}
+      NIGHTLY=nightly-${RH_TAG_DIST_SUFFIX}
+      if [ "$PR_CHECK_BUILD" == "true" ]; then
+        TAG=${RH_TAG_DIST_SUFFIX}-${RH_PULL_REQUEST_ID}
+      fi
       # File che_image_tag.env will be used by the verification script to
       # retrieve the image tag to promote to production. That's the only
       # mechanism we have found to share the tag amongs the two scripts
       echo 'export CHE_SERVER_DOCKER_IMAGE_TAG='${TAG} >> ~/che_image_tag.env
       ;;
   esac
-
-  # fetch the right upstream based che-server image to build from
-  docker pull ${CHE_DOCKER_BASE_IMAGE}
-  docker tag ${CHE_DOCKER_BASE_IMAGE} eclipse/che-server:local
 
   # Use of folder
   LOCAL_ASSEMBLY_DIR="${DIR}"/eclipse-che
@@ -49,27 +53,53 @@ do
 
   echo "Copying assembly ${distribution} --> ${LOCAL_ASSEMBLY_DIR}"
   cp -r "${distribution}" "${LOCAL_ASSEMBLY_DIR}"
-  
-  bash ./build.sh --organization:${DOCKER_HUB_NAMESPACE} --tag:${NIGHTLY}
+
+  if [ "$DeveloperBuild" != "true" ] || [ "$PR_CHECK_BUILD" == "true" ]; then
+    if [ -n "${QUAY_USERNAME}" -a -n "${QUAY_PASSWORD}" ]; then
+      docker login -u "${QUAY_USERNAME}" -p "${QUAY_PASSWORD}" ${REGISTRY}
+    else
+      echo "ERROR: Can not push to ${REGISTRY}: credentials are not set. Aborting"
+      exit 1
+    fi
+  fi
+
+  docker build -t ${DOCKER_IMAGE_URL}:${TAG} -f $DIR/${DOCKERFILE} .
   if [ $? -ne 0 ]; then
     echo 'Docker Build Failed'
     exit 2
   fi
 
-  # cleanup
-  docker rmi eclipse/che-server:local
+  if [ "${USE_CHE_LATEST_SNAPSHOT}" == "true" ]; then
+  	NIGHTLY=$DOCKER_IMAGE_TAG
+  fi
 
   # lets change the tag and push it to the registry
-  docker tag ${DOCKER_HUB_NAMESPACE}/che-server:${NIGHTLY} ${DOCKER_HUB_NAMESPACE}/che-server-multiuser:${TAG}
-  docker tag ${DOCKER_HUB_NAMESPACE}/che-server:${NIGHTLY} ${DOCKER_HUB_NAMESPACE}/che-server-multiuser:${NIGHTLY}
-    
-  dockerTags="${dockerTags} ${DOCKER_HUB_NAMESPACE}/che-server-multiuser:${NIGHTLY} ${DOCKER_HUB_NAMESPACE}/che-server-multiuser:${TAG}"
-    
-  if [ "$DeveloperBuild" != "true" ]
-  then
-    docker login -u ${DOCKER_HUB_USER} -p $DOCKER_HUB_PASSWORD -e noreply@redhat.com 
-    docker push ${DOCKER_HUB_NAMESPACE}/che-server-multiuser:${NIGHTLY}
-    docker push ${DOCKER_HUB_NAMESPACE}/che-server-multiuser:${TAG}
+  docker tag ${DOCKER_IMAGE_URL}:${TAG} ${DOCKER_IMAGE_URL}:${NIGHTLY}
+
+  dockerTags="${dockerTags} ${REGISTRY}/${NAMESPACE}/${DOCKER_IMAGE}:${NIGHTLY} ${REGISTRY}/${NAMESPACE}/${DOCKER_IMAGE}:${TAG}"
+
+  if [ "$DeveloperBuild" != "true" ]; then
+      docker push ${DOCKER_IMAGE_URL}:${NIGHTLY}
+      docker push ${DOCKER_IMAGE_URL}:${TAG}
+  fi
+
+  if [ "${NIGHTLY}" != "*-no-dashboard" ] && [ "$PR_CHECK_BUILD" != "true" ]; then
+      docker build -t ${KEYCLOAK_DOCKER_IMAGE_URL}:${TAG} $ADDONS/rhche-prerequisites/keycloak-configurator
+
+      if [ $? -ne 0 ]; then
+        echo 'Docker Build Failed'
+        exit 2
+      fi
+
+      # lets change the tag and push it to the registry
+      docker tag ${KEYCLOAK_DOCKER_IMAGE_URL}:${TAG} ${REGISTRY}/${NAMESPACE}/${KEYCLOAK_STANDALONE_CONFIGURATOR_IMAGE}:${NIGHTLY}
+
+      dockerTags="${dockerTags} ${REGISTRY}/${NAMESPACE}/${KEYCLOAK_STANDALONE_CONFIGURATOR_IMAGE}:${NIGHTLY} ${REGISTRY}/${NAMESPACE}/${KEYCLOAK_STANDALONE_CONFIGURATOR_IMAGE}:${TAG}"
+
+      if [ "$DeveloperBuild" != "true" ]; then
+          docker push ${KEYCLOAK_DOCKER_IMAGE_URL}:${NIGHTLY}
+          docker push ${KEYCLOAK_DOCKER_IMAGE_URL}:${TAG}
+      fi
   fi
 done
 

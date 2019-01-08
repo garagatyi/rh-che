@@ -1,0 +1,33 @@
+<!--
+
+    Copyright (c) 2016-2018 Red Hat, Inc.
+    This program and the accompanying materials are made
+    available under the terms of the Eclipse Public License 2.0
+    which is available at https://www.eclipse.org/legal/epl-2.0/
+
+    SPDX-License-Identifier: EPL-2.0
+
+    Contributors:
+      Red Hat, Inc. - initial API and implementation
+
+-->
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="Simple test suite"
+       verbose="10"
+       parallel="classes"
+       thread-count="1">
+
+    <test name="all">
+        <classes>
+            <!--<class name="org.eclipse.che.selenium.dashboard.FactoriesListTest"/>-->
+            <!--<class name="org.eclipse.che.selenium.dashboard.CreateWorkspaceTest"/>-->
+            <!--<class name="org.eclipse.che.selenium.dashboard.CreateAndDeleteProjectsTest"/>-->
+            <!--<class name="org.eclipse.che.selenium.dashboard.RenameWorkspaceTest"/>-->
+            <class name="org.eclipse.che.selenium.miscellaneous.DialogAboutTest"/>
+            <class name="com.redhat.che.functional.tests.WorkspaceTest"/>
+            <class name="com.redhat.che.functional.tests.BuildAndRunProjectTest"/>
+            <class name="com.redhat.che.functional.tests.BayesianPomXml"/>
+            <class name="com.redhat.che.functional.tests.BayesianPackageJson"/>
+        </classes>
+    </test>
+</suite>

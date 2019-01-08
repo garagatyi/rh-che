@@ -11,8 +11,8 @@ set +e
 ABSOLUTE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Retrieve credentials to push the image to the docker hub
-cat jenkins-env | grep -e PASS -e GIT -e DEVSHIFT > inherit-env
-. inherit-env
+  eval "$(./env-toolkit load -f jenkins-env.json -r ^GIT_COMMIT$ PASS DEVSHIFT ^QUAY)"
+
 . ${ABSOLUTE_PATH}/../config
 
 # CHE_SERVER_DOCKER_IMAGE_TAG has to be set in che_image_tag.env file
@@ -26,7 +26,7 @@ echo "export OSO_USER=mlabuda" >> $config_file
 echo "export OSO_DOMAIN=8a09.starter-us-east-2.openshiftapps.com" >> $config_file
 echo "export OSO_HOSTNAME=mlabuda-jenkins.8a09.starter-us-east-2.openshiftapps.com" >> $config_file
 echo "export CHE_SERVER_DOCKER_IMAGE_TAG=$CHE_SERVER_DOCKER_IMAGE_TAG" >> $config_file
-echo "export DOCKER_HUB_NAMESPACE=${DOCKER_HUB_NAMESPACE}" >> $config_file
+echo "export NAMESPACE=${NAMESPACE}" >> $config_file
 
 # Triggers update of tenant and execution of functional tests
 echo "CHE VALIDATION: Verification skipped until job devtools-che-functional-tests get fixed"
@@ -39,8 +39,6 @@ echo "CHE VALIDATION: Verification skipped until job devtools-che-functional-tes
 
 echo "CHE VALIDATION: Pushing Che server image to prod registry."
 
-STAGE_IMAGE_TO_PROMOTE="${DOCKER_HUB_NAMESPACE}/che-server-multiuser:${CHE_SERVER_DOCKER_IMAGE_TAG}"
-
 if [ -n "${GIT_COMMIT}" -a -n "${DEVSHIFT_TAG_LEN}" ]; then
   TAG_SHORT_COMMIT_HASH=$(echo $GIT_COMMIT | cut -c1-${DEVSHIFT_TAG_LEN})
 else
@@ -48,41 +46,29 @@ else
   exit 1
 fi
 
-PROD_IMAGE_DEVSHIFT="push.registry.devshift.net/che/che-multiuser:${TAG_SHORT_COMMIT_HASH}"
-PROD_IMAGE_DEVSHIFT_LATEST="push.registry.devshift.net/che/che-multiuser:latest"
-
-if [ -n "${DEVSHIFT_USERNAME}" -a -n "${DEVSHIFT_PASSWORD}" ]; then
-  docker login -u "${DEVSHIFT_USERNAME}" -p "${DEVSHIFT_PASSWORD}" push.registry.devshift.net
+if [ -n "${QUAY_USERNAME}" -a -n "${QUAY_PASSWORD}" ]; then
+  docker login -u "${QUAY_USERNAME}" -p "${QUAY_PASSWORD}" ${REGISTRY}
 else
-  echo "ERROR: Can not push to registry.devshift.net: credentials are not set. Aborting"
+  echo "ERROR: Can not push to ${REGISTRY}: credentials are not set. Aborting"
   exit 1
 fi
 
-echo "CHE VALIDATION: Pushing image ${PROD_IMAGE_DEVSHIFT} and ${PROD_IMAGE_DEVSHIFT_LATEST} to devshift registry"
+STAGE_IMAGE_TO_PROMOTE="${DOCKER_IMAGE_URL}:${CHE_SERVER_DOCKER_IMAGE_TAG}"
 
-docker tag "${STAGE_IMAGE_TO_PROMOTE}" "${PROD_IMAGE_DEVSHIFT}"
-docker tag "${STAGE_IMAGE_TO_PROMOTE}" "${PROD_IMAGE_DEVSHIFT_LATEST}"
+echo "CHE VALIDATION: Pushing image ${PROD_IMAGE_URL} (${TAG_SHORT_COMMIT_HASH} and latest) to ${REGISTRY} registry"
 
-docker push "${PROD_IMAGE_DEVSHIFT}"
-docker push "${PROD_IMAGE_DEVSHIFT_LATEST}"
+docker tag "${DOCKER_IMAGE_URL}:${CHE_SERVER_DOCKER_IMAGE_TAG}" "${PROD_IMAGE_URL}:${TAG_SHORT_COMMIT_HASH}"
+docker tag "${DOCKER_IMAGE_URL}:${CHE_SERVER_DOCKER_IMAGE_TAG}" "${PROD_IMAGE_URL}:latest"
+
+docker push "${PROD_IMAGE_URL}:${TAG_SHORT_COMMIT_HASH}"
+docker push "${PROD_IMAGE_URL}:latest"
+
+echo "CHE VALIDATION: Pushing image ${KEYCLOAK_PROD_IMAGE_URL} (${TAG_SHORT_COMMIT_HASH} and latest) to ${REGISTRY} registry"
+
+docker tag "${KEYCLOAK_DOCKER_IMAGE_URL}:${CHE_SERVER_DOCKER_IMAGE_TAG}" "${KEYCLOAK_PROD_IMAGE_URL}:${TAG_SHORT_COMMIT_HASH}"
+docker tag "${KEYCLOAK_DOCKER_IMAGE_URL}:${CHE_SERVER_DOCKER_IMAGE_TAG}" "${KEYCLOAK_PROD_IMAGE_URL}:latest"
+
+docker push "${KEYCLOAK_PROD_IMAGE_URL}:${TAG_SHORT_COMMIT_HASH}"
+docker push "${KEYCLOAK_PROD_IMAGE_URL}:latest"
 
 echo "CHE VALIDATION: Image pushed to devshift registry"
-
-# We need to continue pushing to the Docker Hub until we have setup a webhook for 
-# repository che/che on devshift. The webhook should trigger
-# https://jenkins.cd.test.fabric8.io/che-version-updater/notify 
-# every time a new version of Che is available 
-PROD_IMAGE_DOCKER_HUB="rhche/che-server-multiuser:${CHE_SERVER_DOCKER_IMAGE_TAG}"
-
-echo "CHE VALIDATION: Pushing ${PROD_IMAGE_DOCKER_HUB} image Docker Hub"
-
-if ([ -z "${DOCKER_HUB_USER+x}" ] || [ -z "${DOCKER_HUB_PASSWORD+x}" ]); then
-    echo "ERROR: Cannot push images to Docker Hub: credentials are not set. Aborting"
-    exit 1
-fi
-
-docker login -u "${DOCKER_HUB_USER}" -p "${DOCKER_HUB_PASSWORD}"
-docker tag "${STAGE_IMAGE_TO_PROMOTE}" "${PROD_IMAGE_DOCKER_HUB}"
-docker push "${PROD_IMAGE_DOCKER_HUB}"
-
-echo "CHE VALIDATION: Image pushed to Docker Hub"

@@ -1,0 +1,15 @@
+# Name: rhche
+# Description: Remove rh-che add on
+# Url: https://github.com/redhat-developer/rh-che
+# Required-Vars: NAMESPACE
+# Var-Defaults: NAMESPACE=rhche
+
+echo [CHE] Deleting all Che objects (deploymentconfig, services, routes etc...)
+oc delete all -l app=rhche -n #{NAMESPACE}
+oc delete rolebinding rhche -n #{NAMESPACE}
+oc delete serviceaccount rhche -n #{NAMESPACE}
+
+echo [CHE] Removing Che server Template
+oc delete -f templates/rh-che.app.yaml -n openshift
+
+echo Eclipse Che addon removed
